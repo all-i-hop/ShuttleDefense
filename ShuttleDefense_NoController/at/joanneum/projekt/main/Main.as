@@ -59,8 +59,6 @@
 		private var enemyTimer:Timer 			= new Timer(800,1);// creating new enemy
 		private var gamePlayTimer:Timer 		= new Timer(15000,1);//advancing game mode
 		private var delayTime:Timer				= new Timer(100,1);  // to prevent multiple signals after push button
-		private var vibrationDelayTime:Timer	= new Timer(800,1); // when shiphit -> vibration timer and red LED
-		private var ledTimer:Timer				= new Timer(2000,1);  //LEDs go out on game initialization
 		private var armorTimer:Timer 			= new Timer(15000,1); // creating new armor
 		private var protectionTime:Timer 		= new Timer (500,1); //time ship is protected after shiphit with protection
 		private var armor:Armor;
@@ -69,7 +67,6 @@
 		private var numEvents:int;
 		private var initComplete:Boolean;
 		private var ship:Ship;
-		private var a;		//Arduino
 		private const FILE_NAME 				= "HighScore_Data.txt";
 		public static var highScoreValue:int 	= 0;
 		public static var enemies:Array			= new Array();
@@ -77,99 +74,85 @@
 
 		public function Main()
 		{
-			stage.displayState=StageDisplayState.FULL_SCREEN;
-			Mouse.cursor=MouseCursor.AUTO; 
-			Mouse.hide();
 			stage.color = 000033;
 			backgroundStars();
-			a = new Arduino("127.0.0.1",5331);
-			a.addEventListener(Event.CONNECT, onSocketConnect);
-			a.addEventListener(ArduinoEvent.FIRMWARE_VERSION, onReceiveFirmwareVersion);
-			a.addEventListener(Event.CLOSE, onSocketClose);
+			initGameData();
+			stage.addEventListener(KeyboardEvent.KEY_DOWN, menuControl);
 		}
 		
 		private function initGameData() {
 			delayTime.addEventListener(TimerEvent.TIMER_COMPLETE, delayTimeComplete);
-			vibrationDelayTime.addEventListener(TimerEvent.TIMER_COMPLETE, vibrationDelayTimeComplete);
-			ledTimer.addEventListener(TimerEvent.TIMER_COMPLETE, ledTimeComplete);
 			gamePlayTimer.addEventListener(TimerEvent.TIMER, advanceGame);
 			enemyTimer.addEventListener(TimerEvent.TIMER, createNewEnemy);
 			armorTimer.addEventListener(TimerEvent.TIMER_COMPLETE, armorTimerComplete);
 			protectionTime.addEventListener(TimerEvent.TIMER_COMPLETE, protectionTimeComplete);
 			loadSound("./Sounds/ufo_highpitch.wav");
-			startGameLed();
+			initGame();
 		}
 
-	
-		// triggered when a serial socket connection has been established
-		public function onSocketConnect(e:Object):void
+	private function menuControl(e:KeyboardEvent) {
+		switch(e.keyCode)
 		{
-			trace("Socket connected!");
-			// request the firmware version
-			a.requestFirmwareVersion();
-		}
-		
-
-		//Event Listener für Firmware Version
-		// the firmware version is requested when the Arduino class has made a socket connection.
-		// when we receive this event we know that the Arduino has been successfully connected.
-		public function onReceiveFirmwareVersion(e:ArduinoEvent):void
-		{
-			trace("Firmware version: " + e.value);
-			if (int(e.value) != 2)
-			{
-				trace("Unexpected Firmware version encountered! This Version of as3glue was written for Firmata2.");
+			case 13:
+					if (pushButton) {
+						if (menuPageOn)
+					{
+						if (newGame.background == true)
+						{
+							startGame();
+						}if (highScore.background == true) {
+							stage.removeChild(newGame);
+							stage.removeChild(quit);
+							stage.removeChild(highScore);
+							highScorePage = new HighScore(stage);
+							stage.addChild(highScorePage);
+							highScorePageOn = true;
+							menuPageOn = false;
+						}
+						if (quit.background == true)
+						{
+							quitGame();
+						}
+					}
+					else if (gameOverPageOn)
+					{
+						gameOverPageOn = false;
+						gameOverPage.onFinish();
+						stage.removeChild(gameOverPage);
+						saveHighScore(highScoreValue);
+						highScoreValue = 0;
+						initGame();
+					}
+					else if (highScorePageOn) {
+						highScorePage.onFinish();
+						stage.removeChild(highScorePage);
+						highScorePageOn = false;
+						menuPageOn = true;
+						initGame();
+					}
+					pushButton = false;
+					delayTime.start();
+					}
+				break;
+			case 32:
+					if (gamePageOn) {
+						stage.addChild(new Laser(stage,ship.x + 10,ship.y - 15));
+						channel = shootSound.play();
+					}
+					break;
+			case 38:
+				if (menuPageOn) menuDown();
+				break;
+			case 40:
+				if(menuPageOn) menuUp();
+				break;
 			}
-			// the port value of an event can be used to determine which board the event was dispatched from
-			// this is one way of dealing with multiple boards, another is to add different listener methods
-			trace("Port: " + e.port);
+	}
 
-			// do some stuff on the Arduino...
-			initArduino();
-		}
-		
-
-		// triggered when a serial socket connection has been closed
-		public function onSocketClose(e:Object):void
-		{
-			trace("Socket closed!");
-		}
-
-		public function initArduino():void
-		{
-			trace("Initializing Arduino");
-			//Digitales Pin Reporting aktivieren
-			a.enableDigitalPinReporting();
-			a.setPinMode(2, Arduino.INPUT);
-			a.setPinMode(4, Arduino.INPUT);
-			a.setPinMode(5, Arduino.INPUT);
-			a.setPinMode(7, Arduino.OUTPUT);
-			a.setPinMode(12, Arduino.OUTPUT);
-			a.writeDigitalPin(5,0);
-			a.writeDigitalPin(4,0);
-			initComplete = true;
-			initGameData();
-		}
-	
-		//Green lights go out;
+		// Prevents prelling
 		private function delayTimeComplete(e:TimerEvent):void {
 			pushButton = true;	
 		}
-		
-		private function vibrationDelayTimeComplete(e:TimerEvent):void {
-			a.writeDigitalPin(12,0);
-			a.writeDigitalPin(8,0);
-			a.writeDigitalPin(7,0);
-			pushButton = true;
-			
-		}
-		//stop flashing lights
-		private function ledTimeComplete(e:TimerEvent):void {
-				a.writeDigitalPin(8,0);
-				a.writeDigitalPin(7,0);
-				initGame();
-		}
-		
 		// decrease the time for creating enemies -> increases difficulty
 		private function advanceGame(e:TimerEvent):void
 		{
@@ -212,17 +195,6 @@
 				var newStar:Star = new Star(stage);
 				stage.addChild(newStar);
 			}
-		}
-
-		
-		private function startGameLed():void {
-			var ledDelay: Timer = new Timer(800,1); // delay for second pair of LEDS to go on
-			a.writeDigitalPin(8,1);
-			ledDelay.addEventListener(TimerEvent.TIMER_COMPLETE, function(e:Event){
-									  a.writeDigitalPin(7,1);
-									  ledTimer.start();
-									  });
-			ledDelay.start();
 		}
 
 		function loadSound(mySound:String):void {
@@ -281,92 +253,9 @@
 			stage.addChild(highScore);
 			stage.addChild(newGame);
 			stage.addChild(quit);
-			Activate EventListeners for game  initialisation
-			Game navigation
-			a.addEventListener(ArduinoEvent.DIGITAL_DATA, menuButtonPress); 
 			
 		}
-		
-		private function menuButtonPress(e:ArduinoEvent):void
-		{
-			if (e.pin == 2){
-				if (pushButton) {
-					if (menuPageOn)
-				{
-					if (newGame.background == true)
-					{
-						startGame();
-					}if (highScore.background == true) {
-						stage.removeChild(newGame);
-						stage.removeChild(quit);
-						stage.removeChild(highScore);
-						highScorePage = new HighScore(stage);
-						stage.addChild(highScorePage);
-						highScorePageOn = true;
-						menuPageOn = false;
-					}
-					if (quit.background == true)
-					{
-						quitGame();
-					}
-				}
-				else if (gameOverPageOn)
-				{
-					gameOverPageOn = false;
-					gameOverPage.onFinish();
-					stage.removeChild(gameOverPage);
-					saveHighScore(highScoreValue);
-					highScoreValue = 0;
-					initGame();
-				}
-				else if (highScorePageOn) {
-					highScorePage.onFinish();
-					stage.removeChild(highScorePage);
-					highScorePageOn = false;
-					menuPageOn = true;
-					initGame();
-				}
-				else if (gamePageOn) {
-					stage.addChild(new Laser(stage,ship.x + 10,ship.y - 15, a));
-					channel = shootSound.play();
-				}
-			}
-			pushButton = false;
-			delayTime.start();
-		}
-			if (e.pin == 4 ) {
-				if (firstRot == 0){
-					firstRot = 4
-				}
-				checkRotation(0);
-			}	
-			if (e.pin == 5) {
-				if (firstRot == 0) {
-					firstRot = 5
-				}
-				checkRotation(1);
-			}
-		}
-		
 
-		private function checkRotation(rotDirection:Number) { // rotDirection 1 = clockwise | 0 = opposite
-			if (rot_counter < 3) {
-				rot_counter++;
-			}
-			else {
-				rot_counter = 0;
-				if (rotDirection == 1 && firstRot == 4){
-					menuDown();
-				}
-				else if (rotDirection == 0 && firstRot == 5) {
-					menuUp();
-				}
-				firstRot = 0;
-			}
-			a.writeDigitalPin(5,0);
-			a.writeDigitalPin(4,0);
-		}
-		
 		private function menuUp():void  {
 			if (newGame.background == true)
 				{
@@ -383,7 +272,6 @@
 					quit.background = false;
 					newGame.background = true;
 				}
-				rotationPoss = true
 		}
 		
 		private function menuDown():void {
@@ -402,9 +290,7 @@
 					quit.background = false;
 					highScore.background = true;
 				}
-				rotationPoss = true
 		}
-		
 			
 		
 		private function saveHighScore(score:int):void {
@@ -439,7 +325,7 @@
 			gamePageOn = true;
 			enemies = new Array();
 			lasers = new Array();
-			ship = new Ship(stage ,a);
+			ship = new Ship(stage /*,a*/);
 			ship.x = 300;
 			ship.y = 400;
 			gamePlayTimer.start();
@@ -478,7 +364,7 @@
 				if (enemies[i].hitTestObject(ship) && !isProtected)
 				{
 					if(!protectedHit) {
-						pushButton = false;
+						//pushButton = false;
 						shipHit = true;
 					}
 				}
@@ -492,9 +378,6 @@
 			}
 			if ((shipHit == true) && !isProtected)
 			{
-				a.writeDigitalPin(12,1);
-				a.writeDigitalPin(8,1);
-				vibrationDelayTime.start();
 				gameOver();
 				shipHit = false;
 			}

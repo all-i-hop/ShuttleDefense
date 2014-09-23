@@ -24,8 +24,9 @@
 
 	public class Ship extends MovieClip
 	{
+
 		private const SPEED:Number = 2;
-		private const VSPEED:Number = 1;
+		private const VSPEED:Number = 0.8;
 		private const MAX_SPEED:Number = 20;
 		private var friction:Number = 0.96;
 		private var vx:Number = 0;
@@ -35,111 +36,52 @@
 		private var upDown:Boolean = false;
 		private var down:Boolean = false;
 		private var stageRef:Stage;
-		//public var a:Arduino;
 		public var initComplete:Boolean;
 		public var linearMonitorA0:MovieClip;
 		public var linearMonitorA0ScaleFactor:Number;
 
-		public function Ship(stageRef:Stage,a:Arduino)
+		public function Ship(stageRef:Stage)
 		{
 			this.stageRef = stageRef;
 			addEventListener(Event.ENTER_FRAME,onFrame);
-			this.a = a;
-			a.addEventListener(ArduinoEvent.ANALOG_DATA,onReceiveAnalogData);
-			addEventListener(KeyboardEvent.KEY_DOWN,checkKey);
-			initArduino();
+			stageRef.addEventListener(KeyboardEvent.KEY_DOWN, onKeyPress);
+			stageRef.addEventListener(KeyboardEvent.KEY_UP, onKeyRemove);
 		}
 
-
-
-		// INIT ARDUINO
-		// set input and output pins
-		public function initArduino():void
-		{
-			trace("Initializing Arduino");
-
-			//set analog inputs
-			a.setAnalogPinReporting(5,Arduino.ON);
-			a.setAnalogPinReporting(5,Arduino.ON);
-			a.setAnalogPinReporting(4,Arduino.ON);
-
-			// done
-			initComplete = true;
-
-		}
-
-
-		public function onReceiveAnalogData(e:ArduinoEvent):void
-		{
-			//trace((numEvents++) +" Analog pin " + e.pin + " on port: " + e.port +" = " + e.value);
-
-			//if initialication is done
-			if (initComplete)
-			{
-
-				switch (e.pin)
-				{
-					case 5 :
-						if (e.value < 280)
-						{
-							leftDown = true;
-							rightDown = false;
-						}
-						if (e.value > 330)
-						{
-							rightDown = true;
-							leftDown = false;
-						}
-						if (e.value > 280 && e.value < 330)
-						{
-							rightDown = false;
-							leftDown = false;
-						}
-						break;
-					case 4 :
-						if (e.value < 290)
-						{
-							upDown = true;
-							down = false;
-						}
-						else if (e.value > 340)
-						{
-							down = true;
-							upDown = false;
-						}
-						else if (e.value > 290 && e.value < 340)
-						{
-							upDown = false;
-							down = false;
-						}
-						if (e.value > 400)
-						{
-							vy =  -  MAX_SPEED;
-						}
-						break;
-				}
-
-			}
-		}
-		private function checkKey(e:KeyboardEvent)
+		private function onKeyPress(e:KeyboardEvent):void
 		{
 			switch (e.keyCode)
 			{
 				case 37 :
 					leftDown = true;
-					rightDown = false;
 					break;
 				case 39 :
 					rightDown = true;
-					leftDown = false;
 					break;
 				case 38 :
 					upDown = true;
-					down = false;
 					break;
 				case 40 :
 					down = true;
+					break;
+			}
+		}
+		
+		private function onKeyRemove(e:KeyboardEvent):void 
+		{
+			switch (e.keyCode)
+			{
+				case 37 :
+					leftDown = false;;
+					break;
+				case 39 :
+					rightDown = false;
+					break;
+				case 38 :
 					upDown = false;
+					break;
+				case 40 :
+					down = false;
 					break;
 			}
 		}
